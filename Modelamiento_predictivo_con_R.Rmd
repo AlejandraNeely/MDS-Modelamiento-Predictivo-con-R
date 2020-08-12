@@ -1,0 +1,1761 @@
+---
+title: "Tarea 1 - Modelamiento Predictivo"
+author: "Víctor Loyola, Alejandra Neely y Marco Vergara"
+date: "26-07-2020"
+output: word_document
+---
+
+# Introducción
+
+En el contexto de la asignatura de Modelamiento Predictivo del Magíster en Ciencia de Datos UAI, se presenta el desarrollo de un modelo predictivo con un set de datos asociados a la banca. Las variables utilizadas definen características bancarias de sus clientes, además de su edad. El objetivo del modelo es predecir cómo estos hábitos contribuyen a los ingresos del banco. Los datos analizados corresponden a 7.420 clientes, con 16 variables. 
+El desarrollo de este proyecto ha sido estructurado en 6 pasos, que se decribirán a continuación:
+
+#### Análisis exploratorio de las variables
+ Tiene como objetivo conocer los datos, es decir, observar la distribución de la variable dependiente y de las variables independientes numéricas. Evaluar la distribución de variables categóricas, es decir la frecuencia con la que se encuentra presente cada categoría de respuesta, detectando posibles desbalances. El desarrollo de un modelamiento predictivo se ve favorecido cuando las variables con las cuales se trabaja se distribuyen de forma normal, en el caso de las variables numéricas, y de forma balanceada, en el caso de las variables categóricas. En el caso de variables numéricas, se pueden aplicar transformaciones no lineales que mejoren sus propiedades para el trabajo posterior. También, se pueden transformar a categóricas variables que tienen una distribución muy asimétrica, de tal forma de agrupar los valores que podrían estar representando diferentes grupos de la población. Se someterá además cada variable independiente a un análisis de regresión simple para evaluar el porcentaje de varianza de la variable independiente que es explicado por cada una.
+ 
+#### Análisis de correlaciones
+ Se evalúa el nivel de correlación entre las variables independientes y la variable dependiente, así como también entre las variables independientes. Esto nos permitirá tener una idea de aquellas variables que podrían estar midiendo constructos muy similares. Es necesario utilizar diferentes estadísticos dependiendo de la naturaleza de las variables. Así, para evaluar correlaciones entre variables numéricas se utilizará la correlación de Pearson, mientras que para evaluar correlaciones entre variables categóricas se utilizará la correlación de Cramer. Sin embargo, también es necesario evaluar la correlación entre las variables categóricas y las variables numéricas, dentro de las cuales se encuentra la variable dependiente. Así, se evaluó primero la correlación Biserial entre las variables categóricas y la variable dependiente que corresponde a los ingresos que percibe el banco respecto de cada cliente. Al utilizar la correlación de tipo Biserial, notamos que el valor de la correlación era igual al valor entregado por la correlación de Pearson cuando se analizan los mismos pares de variables. La razón de esto parece ser que la correlación Biserial es un caso especial de la correlación de Pearson. Se demuestra en el desarrollo que los valores de ambos estadísticos para cada par de variables es igual. Posteriormente, y producto de la comprobación previa, se analizan las correlaciones entre todas las variables utilizando la correlación de Pearson.
+ 
+#### Especificación del modelo
+ Se separa el dataset en un subset de entrenamiento (que contiene un 70% de los datos) y un subset de testeo (que contiene el 30% restante de los datos), y se especifica el modelo de regresión múltiple incluyendo todas las variables que no presentaban correlación absoluta entre ellas analizando también el nivel de colinealidad entre las variables.
+ 
+#### Selección de variables
+ En este paso se busca seleccionar aquellas variables que sean más significativas para el análisis y que explican y se ajustan mejor a los datos para predecir la variable objetivo. Así, el modelo especificado previamente se someterá a análisis utilizando el Coficiente de Determinación Ajustado, el CP de Mallows, BIC, Paso a paso forward, Paso a paso backward, y Paso a paso Stepwise. Estos coeficientes utilizan diferentes variaciones de cálculo para encontrar el conjunto de variables que presentan un mejor ajuste a los datos. Las técnicas anteriores pueden entregar más de un set de variables, lo que permitirá contar con uno o más modelos posibles a evaluar en el paso siguiente.
+ 
+#### Evaluación de la calidad predictiva
+Una vez obtenidas las sugerencias de modelos por parte de los coeficientes analizados en el punto previo, estos se someterán a otro grupo de estadísticos que permiten evaluar la calidad predictiva. La primera función a aplicar es la validación cruzada PRESS, la que evalúa el comportamiento de la selección dejando en forma iterativa un dato afuera armando el modelo con el resto de los datos, aplicados a la muestra de entrenamiento, siendo el que entregue un menor valor el que demostrará un mejor rendimiento. Adicionalmente, para descartar sobre ajuste, se comparan los estadísticos MAE, MAPE y RMSE, aplicados a la data de entrenamiento y data de testeo, esperándose valores similares. Además, se evaluarán los supuestos de homocedasticidad y normalidad de residuos de los modelos, los cuales permiten validar que los test de hipótesis aplicados al modelo son válidos.
+
+#### Interpretación de coeficientes y conclusiones
+Se interpretan los coeficientes aplicados a la realidad del negocio.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning=FALSE,message=FALSE, results=FALSE)
+
+library(readr)
+library(caret) 
+library(PerformanceAnalytics)
+library(dplyr)
+library(corrplot)
+library(GGally)
+library(leaps)
+library(MPV)
+library(boot)
+library(psych)
+library(ggplot2)
+library(inspectdf)
+library(gridExtra)
+library(tidyverse)
+library(lubridate)
+library(moments)
+library(stringr)
+library(gridExtra)
+library(car)
+library(pander)
+# Borrar objetos que se han creado previamente
+rm(list=ls())
+```
+
+# 1. Análisis Exploratorio de las Variables
+
+El análisis exploratorio de variables tiene como objetivo conocer la información del dataset, identificando las características individuales de cada variable, su relación con la variable target a través de regresiones lineales simples, y la presencia de datos faltantes. Estos aspectos serán de gran importancia al momento de tomar decisiones con cada una de ellas a nivel global. Así, se comenzará por identificar la variable objetivo y analizar su distribución. Luego separaremos las variables categóricas de las variables numéricas, analizando cada variable desde el balance de sus categorías y sus distribuciones, respectivamente.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+df_1 <- read.csv('BankRevenue.csv')
+
+# miramos cuantas filas y columnas tiene el dataset
+
+dim(df_1) # [1] 7420   16
+
+# mirar los nombres de las variables
+
+names(df_1) 
+
+# [1] "Rev_Total"  "Bal_Total"  "Offer"      "AGE"        "CHQ"        "CARD"       "SAV1"       "LOAN"      
+#[9] "MORT"       "INSUR"      "PENS"       "Check"      "CD"         "MM"         "Savings"    "AccountAge"
+
+# vista de los primeros 6 registros
+head(df_1)
+
+# Vista de contenido por variable 
+str(df_1)                                                             
+
+# descriptivos basicos
+summary(df_1)
+
+# observamos variables categoricas leidas como numericas
+# convertimos las variables Offer, CHQ, CARD,SAV1,LOAN,MORT,INSUR,PENS,Check,CD,MM,Savings.
+# a categoricas (factor en R)
+
+categoricas_1 <- c("Offer",
+                 "CHQ",
+                 "CARD",
+                 "SAV1",
+                 "LOAN",
+                 "MORT",
+                 "INSUR",
+                 "PENS",
+                 "Check",
+                 "CD",
+                 "MM",
+                 "Savings")
+
+df_1[,categoricas_1] <- lapply(df_1[,categoricas_1],factor)
+
+# descriptivos basicos
+#summary(df_1)
+
+
+# descriptivos
+
+psych::describe(df_1,trim=0.0,quant=c(0.25, 0.5, 0.75), IQR=TRUE) %>% pander()
+
+
+```
+
+
+
+```{r}
+
+options(scipen = 999)
+
+sum(is.na(df_1)) # [1] 0                                                      
+
+df_1 %>% inspect_na                                                  
+#df_1 %>% inspect_na %>% show_plot                                     
+df_1 %>% inspect_types() %>% dplyr::select(1:3) %>% pander()         
+
+#nearZeroVar(df_1, names = T)
+
+# chequea varianzas cercanas a 0 de los atributos numéricos
+
+#df_1 %>% select_if(is.numeric) %>% nearZeroVar(names =TRUE)
+```
+
+
+## 1.1 Variable objetivo y variables explicativas
+
+De acuerdo al análisis preliminar de los datos, cada variable ha adoptado la siguiente tipificación:
+
+1.	Rev_Total (Variable Objetivo): Numérica.
+2.	Bal_Total: Numérica.
+3.	Offer: Categórica.
+4.	AGE: Numérica.
+5.	CHQ: Categórica.
+6.	CARD: Categórica.
+7.	SAV1: Categórica.
+8.	LOAN: Categórica.
+9.	MORT: Categórica.
+10. INSUR: Categórica.
+11.	PENS: Categórica.
+12.	Check: Categórica.
+13.	CD: Categórica.
+14.	MM: Categórica.
+15.	Savings: Categórica.
+16.	AccountAge: Numérica.
+
+El total de registros alcanza los 7420.
+
+## 1.2 Datos Faltantes
+
+Luego de aplicar funciones de detección de datos faltantes no se encuentran, por lo que se descarta aplicar eliminación de registros incompletos en esta etapa.
+
+## 1.3 Distribución de la Variable Objetivo.
+
+La variable objetivo (Rev_Total) que corresponde a la rentabilidad percibida por el banco respecto de cada cliente. Lo primero que observaremos es como se comporta ésta en un histograma y en un diagrama de cajas, como se aprecia en la figura siguiente. Al mirar el ésta se observa en el histograma una distribución exponencial, que se confirma en el diagrama de cajas por la existencia de varios outliers. Lo anterior complicará la modelación, dada principalmente por la asimetría. Al obtener valores de kurtosis de `r round(kurtosis(df_1$Rev_Total),1)` y de skewness de `r round(skewness(df_1$Rev_Total),1)`,  éstos representan valores muy distintos en relación a una distribución normal (como referencia se tiene una kurtosis de 3 y skewness de 0). 
+
+```{r grafico_x, dpi=300,fig.width = 8, fig.asp = .62}
+
+round(skewness(df_1$Rev_Total),1) # 6.809649
+round(kurtosis(df_1$Rev_Total),1) # 117.9165 
+
+
+# Variable Rev_Total (Ingreso total del cliente en 6 meses)
+
+plot1 = ggplot(df_1)+
+  aes(x=Rev_Total,y=..density..) +
+  theme_bw() +
+  geom_histogram(fill="darkorange", bins=30)+
+  ggtitle("Histograma Variable Rev_Total")+
+  scale_x_continuous(breaks=seq(0,40,5),limits=c(0,40)) +
+  labs(x="Rev_Total",y="densidad") +
+  geom_density(color='black')
+  
+  
+plot2 = ggplot(df_1)+
+  aes(y=Rev_Total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill='darkorange') +
+  ggtitle("Boxplot Variable Rev_Total")+
+  labs(y="Rev_Total") 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+
+Por lo anterior y con el objetivo de modelar una variable objetivo que presente simetria en su distribución, se aplica la transformación no lineal de logaritmo, apreciándose en el siguiente gráfico que la distribución queda muy cercana a una distribución normal, con valores que facilitan la realización de test paramétricos posteriores. La kurtosis esta vez es de `r round(kurtosis(log(df_1$Rev_Total)),1)` y la skewness de `r round(skewness(log(df_1$Rev_Total)),1)`. Así también, la cantidad de outliers se reduce en forma importante. La única desventaja de esta transformación es que la posterior interpretación de los coefientes será menos directa.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# log scale
+
+plot1 = ggplot(df_1)+
+  aes(x=log(Rev_Total),y=..density..) +
+  theme_bw() +
+  geom_histogram(fill="darkorange", bins=30)+
+  ggtitle("Histograma Variable log(Rev_Total)")+
+  scale_x_continuous(breaks=seq(-5,5,1),limits=c(-5,5)) +
+  labs(x="Rev_Total",y="densidad") +
+  geom_density(color='black')
+  
+plot2 = ggplot(df_1)+
+  aes(y=log(Rev_Total)) +
+  theme_bw() +
+  geom_boxplot(color='black', fill='darkorange') +
+  ggtitle("Boxplot Variable log(Rev_Total)")+
+  labs(y="log(Rev_Total)") 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+
+```{r}
+df_1 = df_1 %>% 
+mutate(log_Rev_total=log(Rev_Total))
+```
+
+## 1.4 Distribución de Variables Numéricas y regresiones lineales simples en relación a la variable de interés.
+
+Nuestro foco para estas variables, además de su distribución, es su relación con la variable objetivo, para lo cual se realizarán regresiones simples. Si bien en este caso particular la cantidad de variables es pequeña, no siendo necesario una selección en esta etapa, se espera obtener señales preliminares de cuales variables serán las más importantes para el modelo.
+
+### 1.4.1 Total de todas las cuentas mantenidas por el cliente (variable Bal_Total)
+
+Se observa que la varialbe Bal_Total cuenta con una situación similar al de la variable objetivo si se observan los gráficos siguientes. Entonces nuevamente obtenemos los valores de kurtosis de `r round(kurtosis((df_1$Bal_Total)),1)` y  skewness de `r round(skewness((df_1$Bal_Total)),1)`, valores lejanos a una distribución normal simétrica, como se sospechaba. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$Bal_Total))[9]), 2)` con un valor-p < 0.05. 
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable Bal_Total (Total de todos los saldos de cuenta)
+
+color_grafico='cornflowerblue'
+variable='Bal_Total'
+
+plot1 = ggplot(df_1)+
+  aes(x=Bal_Total,y=..density..) +
+  theme_bw() +
+  geom_histogram(fill=color_grafico, bins=30)+
+  ggtitle(paste("Histograma Variable",variable))+
+  scale_x_continuous(breaks=seq(0,300,30),limits=c(0,300)) +
+  labs(x=variable,y="densidad") +
+  geom_density(color='black')
+
+
+plot2 = ggplot(df_1)+
+  aes(y=Bal_Total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable",variable))+
+  labs(y=variable)
+
+x = lm(df_1$log_Rev_total~df_1$Bal_Total)
+
+betas = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+df_1 = df_1 %>%
+  mutate(log_Bal_total=log(Bal_Total))
+
+plot3 = ggplot(df_1)+
+  aes(x= log_Rev_total, y=Bal_Total) +
+  geom_point(shape = 1) +
+  geom_smooth(method=lm) +
+  theme_bw() +
+  ggtitle(paste("Ajuste Variable",variable, " respecto de variable dependiente"))+
+  labs(y=variable) 
+  
+grid.arrange(plot1, plot2, plot3, ncol=3)
+
+
+```
+
+
+Dado lo anterior, aplicamos también la misma transformación logarítmica (viendo el resultado en los gráficos siguientes), lo que mejora los valores con una  kurtosis de `r round(kurtosis(log(df_1$Bal_Total)),1)` y un skewness de `r round(skewness(log (df_1$Bal_Total)),1)`, valores más cercanos a una distribución normal simétrica; aún cuando el resultado ha sido menos exitoso que el realizado con la variable objetivo. 
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+
+color_grafico='cornflowerblue'
+variable='log_Bal_Total'
+
+plot1 = ggplot(df_1)+
+  aes(x=log_Bal_total,y=..density..) +
+  theme_bw() +
+  geom_histogram(fill=color_grafico, bins=30)+
+  ggtitle(paste("Histograma Variable",variable))+
+  scale_x_continuous(breaks=seq(-2,14,2),limits=c(-2,14)) +
+  labs(x=variable,y="densidad") +
+  geom_density(color='black')
+  
+  
+plot2 = ggplot(df_1)+
+  aes(y=log_Bal_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable",variable))+
+  labs(y=variable) 
+
+plot3 = ggplot(df_1)+
+  aes(x= log_Rev_total, y=log_Bal_total) +
+  geom_point(shape = 1) +
+  geom_smooth(method=lm) +
+  theme_bw() +
+  ggtitle(paste("Ajuste Variable",variable, " respecto de variable dependiente"))+
+  labs(y=variable) 
+  
+grid.arrange(plot1, plot2, plot3, ncol=3)
+
+```
+
+
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$log_Bal_total)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+Al realizar la regresión lineal simple, se observa que el coeficiente asociado es significativo, con un valor p < 0.05 y con un valor de R cuadrado de 0.4337, el cual es muy superior al que tuvo la variable posterior a la transformación no lineal. Es por lo anterior que se mantendrá la variable transformada y se espera que ésta sea parte del modelo final.
+
+
+### 1.4.2 Edad del Cliente (AGE)
+
+Variable Numérica. Se observa una distribución cercana a la normal con una kurtosis de `r round(kurtosis(df_1$AGE),1)` y un skewness de `r round(skewness(df_1$AGE),1)`, valores que son muy superiores a los de una normal (3 y 0) respectivamente. No se realizarán transformaciones no lineales sobre esta variable, debido a lo anterior. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$AGE))[9]),3)` con un valor-p < 0.05. El valor presenta un bajo nivel de ajuste, por lo que no existe seguridad que esta variable sea parte del modelo.
+
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+
+# Variable AGE (Edad del cliente)
+
+color_grafico='cornflowerblue'
+variable='AGE'
+
+plot1 = ggplot(df_1)+
+  aes(x=AGE,y=..density..) +
+  theme_bw() +
+  geom_histogram(fill=color_grafico, bins=20)+
+  ggtitle(paste("Histograma Variable",variable))+
+  scale_x_continuous(breaks=seq(0,100,10),limits=c(0,100)) +
+  labs(x=variable,y="densidad") +
+  geom_density(color='black')
+  
+  
+plot2 = ggplot(df_1)+
+  aes(y=AGE) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable",variable))+
+  labs(y=variable) 
+
+plot3 = ggplot(df_1)+
+  aes(x= log_Rev_total, y=AGE) +
+  geom_point(shape = 1) +
+  geom_smooth(method=lm) +
+  theme_bw() +
+  ggtitle(paste("Ajuste Variable",variable, " respecto de variable dependiente"))+
+  labs(y=variable) 
+  
+grid.arrange(plot1, plot2, plot3, ncol=3)
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$AGE)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.4.3 Antiguedad de la cuenta (AccountAge)
+
+Variable Numérica. Se observa una distribución cercana a la normal con coeficientes de kurtosis de `r round(kurtosis(df_1$AccountAge),1)` y un skewness de `r round(skewness(df_1$AccountAge),1)`, los que son levemente distintos a los valores de una normal (3 y 0) respectivamente, por lo que no se realizarán transformaciones no lineales sobre esta variable. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~(df_1$AccountAge)))[9]),3)` con un valor-p < 0.05. Dado que el valor bajo no existe seguridad que esta variable sea parte del modelo final.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable AccountAge (Número de años como cliente del banco).
+
+color_grafico='cornflowerblue'
+variable='AccountAge'
+
+plot1 = ggplot(df_1)+
+  aes(x=AccountAge,y=..density..) +
+  theme_bw() +
+  geom_histogram(fill=color_grafico, bins=20)+
+  ggtitle(paste("Histograma Variable",variable))+
+  scale_x_continuous(breaks=seq(0,30,5),limits=c(0,30)) +
+  labs(x=variable,y="densidad") +
+  geom_density(color='black')
+  
+  
+plot2 = ggplot(df_1)+
+  aes(y=AccountAge) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable",variable))+
+  labs(y=variable) 
+
+plot3 = ggplot(df_1)+
+  aes(x= log_Rev_total, y=AccountAge) +
+  geom_point(shape = 1) +
+  geom_smooth(method=lm) +
+  theme_bw() +
+  ggtitle(paste("Ajuste Variable",variable, " respecto de variable dependiente"))+
+  labs(y=variable) 
+
+  
+grid.arrange(plot1, plot2, plot3, ncol=3)
+
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~(df_1$AccountAge))
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+
+## 1.5 Distribución de Variables Categóricas y regresiones lineales simples en relación a la variable de interés
+
+En esta sección se revisarán las variables categóricas, en términos de su balance y asociación visual, y su relación con la variable a explicar para adelantar posibles asociaciones, mediante modelos de regresión lineal simple con la variable objetivo. 
+
+### 1.5.1 Indicador de recepción o no recepción de oferta (Offer)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, no se observa que existe una media distinta en función de la variable a determinar, por lo que no se espera una relación de ajuste alta. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$Offer))[9]),4)` con un valor-p > 0.05. Dado el bajo valor de ajuste no se espera que esta variable sea parte del modelo final.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+color_grafico='mediumorchid3'
+variable='Offer'
+
+plot1 = 
+  df_1 %>% group_by(Offer) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=Offer,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=Offer,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+```{r}
+# Se pueden usar dummies en lm
+# http://www.sthda.com/english/articles/40-regression-analysis/163-regression-with-categorical-variables-dummy-coding-essentials-in-r/#:~:text=Regression%20analysis%20requires%20numerical%20variables,set%20of%20separate%20binary%20variables.
+
+x = lm(df_1$log_Rev_total~df_1$Offer)
+
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+
+### 1.5.2  Indicador de alta o baja actividad en la tarjeta de débito (CHQ)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, se observa una una media distinta, pero no absoluta, en función de la variable a determinar, debido a que comparten valores en el rengo cuartil 25-50, por lo que se espera un valor bajo de ajuste. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$CHQ))[9]),4)` con un valor-p < 0.05. Si bien el ajuste es mayor que el caso anterior sigue siendo bajo, por lo que no se puede asegurar que esta variable sea parte del modelo final.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable CHQ (Indicador de actividad de la cuenta de tarjeta de débito.
+#CHQ = 0 es una actividad de cuenta baja (o cero), CHQ = 1 es una actividad de cuenta alta)  
+
+color_grafico='mediumorchid3'
+variable='CHQ'
+
+plot1 = 
+  df_1 %>% group_by(CHQ) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=CHQ,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad") 
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=CHQ,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$CHQ)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+
+```
+
+
+### 1.5.3 Indicador de alta o baja actividad en la tarjeta de crédito (CARD)
+
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, no se observa que existe una media distinta en función de la variable a determinar, por lo que no se espera una relación de ajuste alta. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$CARD))[9]),4)` con un valor-p > 0.05. Dado el bajo valor de ajuste no se espera que esta variable sea parte del modelo final.
+
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable CARD (Indicador de actividad de la cuenta de tarjeta de crédito.
+#CARD = 0 es baja o cero actividad de la cuenta, CARD = 1 es alta actividad de la cuenta)  
+
+color_grafico='mediumorchid3'
+variable='CARD'
+
+plot1 = 
+  df_1 %>% group_by(CARD) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=CARD,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=CARD,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$CARD)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.5.4 Indicador de alta o baja actividad en la cuenta de ahorro primaria (SAV1)
+
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías presentan un fuerte desbalance entre ellas, lo que puede presentar un problema en el modelo. Al observar el gráfico de la derecha, no se observa que existe una media distinta en función de la variable a determinar, por lo que no se espera una relación de ajuste alta. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$SAV1))[9]),4)` con un valor-p < 0.05. Dado el bajo valor de ajuste no se espera que esta variable sea parte del modelo final.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable SAV1 (Indicador de actividad de la cuenta de ahorro primaria.
+#SAV1 = 0 es baja o cero actividad de la cuenta, SAV1 = 1 es alta actividad.)  
+
+color_grafico='mediumorchid3'
+variable='SAV1'
+
+plot1 = 
+  df_1 %>% group_by(SAV1) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=SAV1,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad") 
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=SAV1,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$SAV1)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.5.5 Indicador de alta o baja actividad en la cuenta de préstamo personal (LOAN)
+
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, observa que existe una media distinta en función de la variable a determinar, compartiendo solo una parte del rango cuartil, por lo que se espera un ajuste relativamente importante. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$LOAN))[9]),4)` con un valor-p < 0.05. Dado el valor de ajuste, se espera que esta variable sea parte del modelo final.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+# Variable LOAN (Indicador de actividad de la cuenta de préstamo personal.
+#LOAN = 0 es baja o cero actividad de la cuenta, LOAN = 1 es alta actividad)  
+
+color_grafico='mediumorchid3'
+variable='LOAN'
+
+plot1 = 
+  df_1 %>% group_by(LOAN) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=LOAN,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=LOAN,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$LOAN)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.5.6 Indicador del Nivel de importancia de la cuenta hipotecaria (MORT)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, se observa una una media distinta, pero no absoluta, en función de la variable a determinar, debido a que comparten valores en el rengo cuartil 25-50, por lo que se espera un valor bajo de ajuste. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$MORT))[9]),4)` con un valor-p < 0.05. Si bien el ajuste es mayor que el caso anterior sigue siendo bajo, por lo que no se puede asegurar que esta variable sea parte del modelo final.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+# Variable MORT (Indicador del nivel de la cuenta hipotecaria.
+#MORT = 0 es el nivel inferior y menos importante para la cartera del banco. MORT = 1 es un nivel superior e indica que la cuenta es más importante para la cartera del banco).
+
+color_grafico='mediumorchid3'
+variable='MORT'
+
+plot1 = 
+  df_1 %>% group_by(MORT) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=MORT,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad") 
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=MORT,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$MORT)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.5.7 Indicador de alta o baja actividad en la cuenta de seguros (INSUR)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, se observa una una media distinta, pero no absoluta, en función de la variable a determinar, debido a que comparten valores en el rengo cuartil 25-50, por lo que se espera un valor bajo de ajuste. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$INSUR))[9]),4)` con un valor-p < 0.05. Si bien el ajuste es mayor que el caso anterior sigue siendo bajo, por lo que no se puede asegurar que esta variable sea parte del modelo final.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable INSUR (Indicador de actividad de la cuenta de seguros. 
+#INSUR = 0 es baja o cero actividad de la cuenta, INSUR = 1 es mayor actividad)
+
+color_grafico='mediumorchid3'
+variable='INSUR'
+
+plot1 = 
+  df_1 %>% group_by(INSUR) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=INSUR,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad") 
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=INSUR,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$INSUR)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+### 1.5.8 Indicador del Nivel de ahorro para la jubilación (PENS)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, no se observa que existe una media distinta en función de la variable a determinar, por lo que no se espera una relación de ajuste alta. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$PENS))[9]),4)` con un valor-p > 0.05. Dado el bajo valor de ajuste no se espera que esta variable sea parte del modelo final.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable PENS (Indicador o cuenta de ahorro para la jubilación (pensión). 
+#PENS = 0 es un saldo más bajo y menos importante para la cartera del banco. PENS = 1 es un nivel superior y de mayor importancia para la cartera del banco).
+
+color_grafico='mediumorchid3'
+variable='PENS'
+
+plot1 = 
+  df_1 %>% group_by(PENS) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=PENS,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=PENS,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$PENS)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.5.9 Indicador de alta o baja actividad en la cuenta corriente (Check)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, se observa una una media distinta, pero no absoluta, en función de la variable a determinar, debido a que comparten valores en el rengo cuartil 25-50, por lo que se espera un valor bajo de ajuste. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$Check))[9]),4)` con un valor-p < 0.05. Si bien el ajuste es mayor que el caso anterior sigue siendo bajo, por lo que no se puede asegurar que esta variable sea parte del modelo final.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable Check (Indicador de actividad de cuenta corriente. 
+#Check = 0 es baja o cero actividad de la cuenta, Check = 1 es alta actividad).
+
+
+color_grafico='mediumorchid3'
+variable='Check'
+
+plot1 = 
+  df_1 %>% group_by(Check) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=Check,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad") 
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=Check,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$Check)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.5.10 Indicador de importancia del nivel de certificado de depósito (CD)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, observa que existe una media distinta en función de la variable a determinar, compartiendo solo una parte del rango cuartil, por lo que se espera un ajuste relativamente importante. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$CD))[9]),4)` con un valor-p < 0.05. Dado el valor de ajuste, se espera que esta variable sea parte del modelo final.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable CD (Indicador de nivel de cuenta de certificado de depósito.
+#CD = 0 es de nivel inferior y de menor importancia para la cartera del banco. CD = 1 es un nivel superior y de mayor importancia para la cartera del banco)
+
+
+color_grafico='mediumorchid3'
+variable='CD'
+
+plot1 = 
+  df_1 %>% group_by(CD) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=CD,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=CD,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$CD)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.5.11 Indicador del nivel de actividad en la cuenta del mercado monetario (MM)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, se observa una una media distinta, pero no absoluta, en función de la variable a determinar, debido a que comparten valores en el rengo cuartil 25-50, por lo que se espera un valor bajo de ajuste. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$MM))[9]),4)` con un valor-p < 0.05. Si bien el ajuste es mayor que el caso anterior sigue siendo bajo, por lo que no se puede asegurar que esta variable haga parte del modelo final.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable MM (Indicador de actividad de la cuenta del mercado monetario.
+#MM = 0 es baja o cero actividad de la cuenta, MM = 1 es alta actividad).
+
+color_grafico='mediumorchid3'
+variable='MM'
+
+plot1 = 
+  df_1 %>% group_by(MM) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=MM,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=MM,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$MM)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.5.12 Indicador del nivel de actividad en la cuenta de ahorro que no sea primaria (Savings)
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, se observa una una media distinta, pero no absoluta, en función de la variable a determinar, debido a que comparten valores en el rengo cuartil 25-50, por lo que se espera un valor bajo de ajuste. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$Savings))[9]),4)` con un valor-p < 0.05. Si bien el ajuste es mayor que el caso anterior sigue siendo bajo, por lo que no se puede asegurar que esta variable haga parte del modelo final.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Variable Savings (Indicador de actividad de cuentas de ahorro (que no sea primaria).
+#Ahorro = 0 es baja o cero actividad de la cuenta, Ahorro = 1 es alta  actividad)
+
+
+color_grafico='mediumorchid3'
+variable='Savings'
+
+plot1 = 
+  df_1 %>% group_by(Savings) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=Savings,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad") 
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=Savings,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+
+
+```
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+x = lm(df_1$log_Rev_total~df_1$Savings)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+## 1.6 Distribución de variables numéŕicas convertidas a categóricas y regresiones simples en relación a la variable de interés.
+
+A continuación se convertirán las variables numéricas en variables categóricas con el objetivo de modelar su distribución no normal y analizar si esto mejora la capacidad predictiva del modelo en etapas posteriores, medida en esta etapa en base a la comparación entre regresiones lineales simples.
+
+### 1.6.1 Variable Antiguedad de la cuenta "Account Age"
+
+```{r}
+df_1 = df_1 %>% mutate(
+   AccountAge_cat =  as.factor(ifelse(AccountAge <= 6, 0,
+                          ifelse(AccountAge >6, 1, 4)))
+)
+```
+
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, no se observa que existe una media distinta en función de la variable a determinar, por lo que no se espera una relación de ajuste alta. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$AccountAge_cat))[9]),4)` con un valor-p < 0.05. Dado el bajo valor de ajuste no se espera que esta variable sea parte del modelo final. Dado que no se provoca mejora, se mantendrá la variable original.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+
+color_grafico='lightsalmon1'
+variable='AccountAge_cat'
+
+plot1 = 
+  df_1 %>% group_by(AccountAge_cat) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=AccountAge_cat,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=AccountAge_cat,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$AccountAge_cat)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.6.2 Variable Edad del Cliente "Age"
+
+```{r}
+
+df_1 = df_1 %>% mutate(
+   AGE_cat =  as.factor(ifelse(AGE <= 45, 0,
+                          ifelse(AGE > 45, 1,  4)))
+)
+```
+
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, no se observa que existe una media distinta en función de la variable a determinar, por lo que no se espera una relación de ajuste alta. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$AGE_cat))[9]),4)` con un valor-p < 0.05. Dado el bajo valor de ajuste no se espera que esta variable sea parte del modelo final. Dado que no se provoca mejora, se mantendrá la variable original.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+
+#df_1$AGE_cat = as.numeric(df_1$AGE_cat)
+
+
+color_grafico='lightsalmon1'
+variable='AGE_cat'
+
+plot1 = 
+  df_1 %>% group_by(AGE_cat) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=AGE_cat,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=AGE_cat,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable log_Rev_total"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+```{r}
+x = lm(df_1$log_Rev_total~df_1$AGE_cat)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+
+### 1.6.3 Variable Total de todas las cuentas mantenidas por el cliente "Bal_total"
+
+```{r}
+df_1 = df_1 %>% mutate(
+   Bal_total_cat =  as.factor(ifelse(Bal_Total >= 1200, 0,
+                          ifelse(Bal_Total < 1200, 1, 3)))
+)
+```
+
+
+Se observa, en el siguiente gráfico (izquierda), que las categorías no presentan un fuerte desbalance entre ellas. Al observar el gráfico de la derecha, se observa una diferencia con muy poco rango intercuartil en común con la separación realizada. Al evaluar esta variable en una regresión simple junto a la variable dependiente entrega un $R^{2}$ ajustado de `r round(as.numeric(summary(lm(df_1$log_Rev_total~df_1$Bal_total_cat))[9]),4)` con un valor-p < 0.05. Dado el bajo valor de ajuste no se espera que esta variable sea parte del modelo final. Si bien el valor es alto, éste no supera al valor de la variable transformada mediante logaritmo, por lo que se mantiene la transformación original.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+#df_1$Bal_total_cat = as.numeric(df_1$Bal_total_cat)
+
+color_grafico='lightsalmon1'
+variable='Bal_total_cat'
+
+plot1 = 
+  df_1 %>% group_by(Bal_total_cat) %>% summarise(cantidad=n()) %>% 
+  ggplot() +
+  aes(x=Bal_total_cat,y=cantidad) +
+  theme_bw() +
+  geom_bar(stat='identity',colour="black", fill=color_grafico)+
+  ggtitle(paste("Cantidades Variable",variable))+
+  labs(x=variable,y="cantidad")
+  
+  
+plot2 = ggplot(df_1)+
+  aes(x=Bal_total_cat,y=log_Rev_total) +
+  theme_bw() +
+  geom_boxplot(color='black', fill=color_grafico) +
+  ggtitle(paste("Boxplot Variable Bal_total_cat"))+
+  labs(y="log_Rev_Total", x=variable) 
+  
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+
+
+
+```{r}
+x = lm(df_1$log_Rev_total~df_1$Bal_total_cat)
+betas2 = data.frame(variable=c(names(coef(x)[2])),beta_ind=c(coef(x)[2]),beta_modelo=c(100))
+betas = rbind(betas,betas2)
+```
+
+## 1.7 Conclusiones Analisis Exploratorio.
+
+Luego del análisis exploratorio, se ha establecido para la variable objetivo una transformación no lineal (logaritmo), con la finalidad de acercar la distribución a una normal centrada. Lo anterior permite mejorar la predicción con el costo de una interpretación directa de los ingresos (variable Rev_total).
+
+Por otra parte, para las variables explicativas se han separado, a partir del $R^{2}$ que entrega cada modelo de regresión simple para la variable objetivo, en términos de su probabilidad de participación del modelo final:
+
+* Altamente Probables ($R^{2}$ > 0.05): Bal_Total, log_Bal_Total,Bal_total_cat, LOAN, CD
+* Probables (0.05 > $R^{2}$ > 0.01): CHQ, MORT, INSUR, Check, MM, Savings
+* Poco Probables ($R^{2}$ < 0.01): Age, AccountAge, Offer, CARD, SAV1, PENS, AccountAge_cat, AGE_cat
+
+Se observa que las transformaciones de las variables (ya sea mediante aplicación de logaritmo o categorización), no mejora su capacidad de ajuste respecto de la variable de interés. La única transformación que se mantiene es la no lineal de logaritmo, ya que existe un indicador de ajuste mayor.
+
+A continuación se observan los valores beta de las regresiones simples entre cada variable independiente y la variable dependiente. Estos valores se analizarán con los coeficientes obtenidos en la regresión múltiple del modelo final, dentro de la interpretación de coeficientes.
+
+```{r, echo=TRUE, eval=TRUE, results="markup", tidy=TRUE}
+library(dplyr)
+betas %>% dplyr::select(2) %>% pander()
+
+```
+
+# 2. Análisis de correlaciones
+
+  Para el análisis de correlaciones primero nos centraremos en las variables numéricas, con el objetivo de identificar si existen, preliminarmente, relaciones fuertes o débiles entre las variables, puestas en la siguiente figura. 
+
+  Considerando que la variable a predecir es el logaritmo de los ingresos totales percibidos a partir de cada cliente (log_Rev_total), observamos que si bien todas las correlaciones entre variables numéricas son significativas, hay una correlación fuerte y positiva (valor 0.66) con el logaritmo de las cuentas mantenidas por el cliente (log_Bal_total), con un gráfico cercano a una relación lineal. La siguiente relación, de un 0.33, es negativa entre el logaritmo de las cuentas mantenidas por el cliente (log_Bal_total) y la antiguedad de la cuenta (AccountAge), con un comportamiento no lineal. Dado que éstas son variables explicativas, podrían producir un efecto de inflación por colinealidad. Luego se observa una relación más débil (0.12) entre las variables edad del cliente (AGE) y antiguedad de la cuenta (AccountAge).
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# Se crea una variable adicional, df_2 por motivos de ruteo.
+df_2 <- dplyr::select(df_1, -AccountAge_cat, -AGE_cat, -Bal_total_cat, -Bal_Total, -Rev_Total)
+
+df_2 %>%
+  select_if(is.numeric) %>%
+  #select(-Bal_Total) %>%
+  chart.Correlation(method = "pearson") 
+```
+
+Respecto de las variables categóricas, se analiza la correlación existente entre ellas con el estadístico de Cramer. Se observa una correlación perfecta entre algunas de ellas ("LOAN" y "CD", "INSUR" y "MM", "INSUR" y "Savings" y entre "MM" y "Savings"), lo cual indica que no deberían ser ingresadas al modelo aquellas que están mostrando dicha redundancia, es decir, CD, MM y Savings. Offer y CARD también presentan una alta correlación, de .87, sin embargo esperaremos a analizar colinealidad antes de descatar alguna de dichas variables del modelo.
+
+
+```{r, echo=FALSE, eval=TRUE, results="markup", tidy=TRUE}
+library(creditmodel)
+# df_cat <- select(df_1, CD, MM, Savings, AccountAge_cat, AGE_cat, log_Bal_total)
+# str(df_cat)
+df_1 %>% 
+  dplyr::select(-AccountAge_cat, -AGE_cat, -Bal_total_cat) %>% 
+  char_cor() %>% pander()
+```
+  
+  Además, se analizó la correlación biserial entre cada variable categórica dicotómica y la variable objetivo. Todas las variables categóricas presentaron una baja correlación con la variable objetivo. Luego de cada correlación biserial entre cada par de variables (introducida por "[1]") se añade la correlación de Pearson, ya que la literatura sugiere que ambos dan los mismos valores. Esto se comprueba, por lo que posteriormente se correlacionan todas las variables entre sí, utilizando la correlación de Pearson.
+
+```{r, echo=FALSE, eval=TRUE, results="markup", tidy=TRUE}
+# https://stats.stackexchange.com/questions/105542/proof-of-point-biserial-correlation-being-a-special-case-of-pearson-correlation/105553#105553
+
+library(ltm)
+
+biserial.cor(df_1$log_Rev_total, df_1$Offer, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$Offer))
+biserial.cor(df_1$log_Rev_total, df_1$CHQ, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$CHQ))
+biserial.cor(df_1$log_Rev_total, df_1$CARD, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$CARD))
+biserial.cor(df_1$log_Rev_total, df_1$SAV1, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$SAV1))
+biserial.cor(df_1$log_Rev_total, df_1$LOAN, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$LOAN))
+biserial.cor(df_1$log_Rev_total, df_1$MORT, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$MORT))
+biserial.cor(df_1$log_Rev_total, df_1$INSUR, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$INSUR))
+biserial.cor(df_1$log_Rev_total, df_1$PENS, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$PENS))
+biserial.cor(df_1$log_Rev_total, df_1$Check, use = c("all.obs"), level = 2)
+cor.test(df_1$log_Rev_total, as.numeric(df_1$Check))
+```
+ 
+Ahora, que hemos analizado correlaciones entre variables numéricas, entre variables categóricas, y entre las variables categóricas y la variable objetivo que era de carácter numérico, faltaría determinar la correlación entre las variables categóricas y el resto de las variables numéricas. Ya que la correlación de Pearson demostró dar los mismos resultados que la correlación Biserial, utilizaremos una matriz de Pearson para visualizar una última vez las correlaciones entre todas las variables, para desde allí analizar las correlaciones entre variables numéricas y variables categóricas.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+library(Hmisc)
+cor_5 <- rcorr(as.matrix(df_2))
+M <- cor_5$r
+p_mat <- cor_5$P
+
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+df_2 %>% 
+  dplyr::select(-CD, -MM, -Savings) %>% 
+  mutate_if(is.factor, as.integer) %>%
+  mutate_if(is.character, as.integer) %>%
+ select_if(is.numeric) %>%
+  cor(method= "pearson") %>%
+  corrplot(method = "color", col = col(200),  
+         type = "upper", order = "hclust", 
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col = "darkblue", tl.srt = 45, #Text label color and rotation
+         # Combine with significance level
+         p.mat = p_mat, sig.level = 0.01,  
+         number.cex=0.7,
+         # hide correlation coefficient on the principal diagonal
+         diag = FALSE 
+         )
+```
+ 
+La matriz de correlaciones muestra que hay algunas correlaciones altas entre AccountAge y Offer, entre AccountAge y CARD, y entre log_Bal_Total y MORT. Sin embargo, ya que no son correlaciones absolutas, las dejaremos por ahora, esperando analizarlas en mayor profundidad a través del análisis de colinealidad.
+A modo de conclusión del análisis de correlaciones, la variable de interés tiene una correlación fuerte y positiva con las variables log_Bal_Total (0.66), Check (0.27), y LOAN (0.21), lo que es coherente con los valores expresados en las conclusiones del análisis exploratorio (punto 1.7).
+
+
+# 3. Especificación del modelo
+
+El modelo que se establecerá, es un modelo lineal de la forma siguiente:
+
+Y = beta * X
+
+con 
+
+Y = log_Rev_total
+
+y
+
+X = [log_Bal_total,AGE,AccountAge,Offer,CHQ,CARD,SAV1,LOAN,MORT,INSUR,PENS,Check]
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+df_2 = df_2 %>% 
+  dplyr::select(-CD, -MM, -Savings) 
+
+#Separar la data en data de entrenamiento y data de validación.
+set.seed(12345432)
+p_train = 0.7
+p_train_porc = round(p_train*100,0)
+
+index_1 <- createDataPartition(df_2$log_Rev_total, p = p_train, list = FALSE)
+
+df_2_train<- df_2[index_1,]
+df_2_test <- df_2[-index_1,]
+
+# seleccionar variables para modelar
+
+names(df_2_train)
+
+# Creamos el Modelo Completo (con todas la variables)
+
+fit_1 <- lm(log_Rev_total~.,data = df_2_train)
+summary(fit_1)
+
+
+           
+# chequear multicolinealidad
+
+vif(fit_1)         
+
+```
+
+
+Se separa la data de entrenamiento en `r p_train_porc`%, para luego aplicar la regresión lineal sobre estos datos, obteniendo los estadísticos del modelo. Se observa que el estadístico F rechaza la hipótesis nula que no existe una relación entre las variables que explican y la variable objetivo. Se observa también que los valores VIF se encuentran bajo 10, que es uno de los criterios usualmente utilizados para determinar ausencia de multicolinealidad. Sin embargo, otro punto de corte típico para este estadístico es 5, sobre el cual se encuentran las variables CARD (9.2), y Check (6.5). De esta forma y, de acuerdo a este último punto de corte, CARD y Check sí presentan problemas de colinealidad. Para abordar el problema anterior, se elimina primero la variable de mayor VIF (CARD) y se vuelve a probar el modelo.
+ 
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+#df_2 = df_1
+df_2 <- dplyr::select(df_2, -CARD)
+
+#Separar la data en data de entrenamiento y data de validación.
+library(caret)
+set.seed(12345432)
+p_train=0.7
+# p_train_porc = round(p_train*100,0)
+
+index_1 <- createDataPartition(df_2$log_Rev_total, p=p_train, list=FALSE)
+
+df_2_train<- df_2[index_1,]
+df_2_test <- df_2[-index_1,]
+
+# seleccionar variables para modelar
+names(df_2_train)
+#df_1_train <- select(df_train,-zipcode)
+
+# Creamos el Modelo Completo (con todas la variables)
+
+fit_2 <- lm(log_Rev_total~.,data = df_2_train)
+summary(fit_2)
+
+
+# chequear multicolinealidad
+
+vif(fit_2)   
+
+```
+
+Obteniéndose que ahora ninguna variable supera el valor 5 de VIF (siendo la mayor Check con un valor de 3.6). Lo anterior valida que las variables que se analizarán para el siguiente proceso son las siguientes:
+
+1.	log_Bal_Total: Numérica.
+2.	Offer: Categórica.
+3.	AGE: Numérica.
+4.	CHQ: Categórica.
+5.	SAV1: Categórica.
+6.	LOAN: Categórica.
+7.	MORT: Categórica.
+8. INSUR: Categórica.
+9.	PENS: Categórica.
+10.	Check: Categórica.
+11.	AccountAge: Numérica.
+
+
+# 4. Selección de variables
+
+La selección de variables se puede realizar a través de diferentes técnicas, siendo las utilizadas en el desarrollo de este análisis las siguientes:
+
+1. Coeficiente de determinación ajustado
+2. Cp de Mallows
+3. BIC (Schwartz' Bayesian Criterion)
+4. Paso a paso Forward
+5. Paso a paso Backward
+6. Paso a paso Stepwise
+
+Cada una de estas técnicas sugiere un grupo específico de las variables ingresadas que mejor se ajustan a los datos. Cada modelo sugerido por cada técnica será también evaluado a través del estadístico PRESS. Esto, considerando que este estadístico indica la capacidad predictiva y no solo la bondad de ajuste. Aquel modelo sugerido que tenga un mayor valor PRESS será el modelo elegido para continuar el análisis. También cada modelo sugerido será sometido a los estadísticos MAPE, MAE Y RMSE con las muestras de entrenamiento (train) y validacíon (test), para descartar un sobreajuste.
+
+## 4.1 Coeficiente de Determinación Ajustado
+
+El coeficiente de determinación ajustado nos entrega el siguiente gráfico, observándose que el modelo que maximiza el indicador cuenta con 8 variables, las que son: Offer1, AGE, CHQ1, LOAN1, MORT1, Check1, AccountAge, log_Bal_total. El modelo sugerido mostró un indicador PRESS de 3753.505.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+# funcion regsubsets: metodos best subset selection
+
+library(graphics)
+
+regbest.full_1 <- regsubsets(log_Rev_total~.,data = df_2_train,nvmax = 10)
+summary(regbest.full_1)
+reg.summary_1 <- summary(regbest.full_1)
+names(reg.summary_1)
+
+##### 1) Utilizando R2 ajustado:
+# graficamos para ver cuantas variables quedan en el modelo
+
+plot(reg.summary_1$adjr2,
+     xlab = "Numero de Variables",
+     ylab = "R2 ajustado",
+     type = "l",
+     main = "Coeficiente Indicador Ajustado Para Distintos Modelos de Regresión Lineal")
+which.max(reg.summary_1$adjr2)
+points(8,
+       reg.summary_1$adjr2[8],
+       col="red",
+       cex=2,
+       pch=20)
+
+# muestra los coeficientes estimados y variables que quedaron en el modelo
+
+coef(regbest.full_1,8)
+
+modelo = lm(log_Rev_total~Offer+AGE+LOAN+MORT+Check+CHQ+AccountAge+log_Bal_total,data=df_2_train)
+PRESS(modelo) #1643 # 3752.855
+summary(modelo)
+```
+
+
+## 4.2 CP de Mallows
+
+Para el indicador CP de Mallows el resultado del modelo sugerido contiene 6 variables, siendo este el que minimiza el indicador (ver figura siguiente). Las variables seleccionadas son: Offer, LOAN, MORT, Check, AccountAge, log_Bal_total. Presenta además un valor PRESS de 3752.775
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+##### 2) Usando el Cp:
+# graficamos para ver cuantas variables quedan en el modelo
+
+plot(reg.summary_1$cp,
+     xlab = "Numero de Variables",
+     ylab = "Cp",
+     type = "l",
+     main = "Indicador Cp Para Distintos Modelos de Regresión Lineal")
+which.min(reg.summary_1$cp)
+points(6,
+       reg.summary_1$cp[6],
+       col="red",
+       cex=2,
+       pch=20)
+
+# muestra los coeficientes estimados y variables que quedaron en el modelo
+
+coef(regbest.full_1,6)
+
+modelo = lm(log_Rev_total~Offer+LOAN+MORT+Check+AccountAge+log_Bal_total,data=df_2_train)
+PRESS(modelo) # 3752.855
+```
+
+
+
+## 4.3 BIC
+
+El modelo resultante tiene 6 variables, lo que es idéntico al indicador CP de Mallows, es decir sugiere las mismas variables con el mismo valor PRESS. En el gráfico siguiente muestra que el conjunto de variables minimiza el indicador.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+##### 4) Utilizando BIC:
+# graficamos para ver cuantas variables quedan en el modelo
+
+plot(reg.summary_1$bic,
+     xlab = "Numero de Variables",
+     ylab = "BIC",
+     type = "l",
+     main = "Indicador BIC Para Distintos Modelos de Regresión Lineal")
+which.min(reg.summary_1$bic)
+points(6,
+       reg.summary_1$bic[6],
+       col="red",
+       cex=2,
+       pch=20)
+
+# muestra los coeficientes estimados y variables que quedaron en el modelo
+
+coef(regbest.full_1,6)
+modelo = lm(log_Rev_total~Offer+LOAN+MORT+Check+AccountAge+log_Bal_total,data=df_2_train)
+PRESS(modelo)
+```
+
+
+
+
+## 4.4 Paso a paso Forward
+
+Para el método forward el resultado del modelo queda igual que los modelos sugeridos por el CP de Mallows y BIC.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+##### Usando Criterios Paso a Paso:
+
+# MODELO NULO - cuando especificamos R ~ 1 estamos ajustando un modelo solo con el termino constante
+
+nulo_1 <- lm(log_Rev_total~1,
+           data=df_2_train)
+nulo_1
+
+# MODELO COMPLETO - cuando especificamos Rev_Total ~ . estamos ajustando un modelo solo con todas las varibles
+
+completo_1 <- lm(log_Rev_total~.,data=df_2_train)
+summary(completo_1)
+
+# FORWARD - Usando el criterio forward:
+# ver resultados en consola
+
+step(nulo_1,
+     scope = list(lower = nulo_1,
+                  upper = completo_1),
+     direction = "forward")
+
+
+```
+
+```{r}
+modelo = lm(formula = log_Rev_total ~ log_Bal_total + Offer + MORT + AccountAge + 
+    Check + LOAN, data = df_2_train)
+PRESS(modelo) # 3775.073
+```
+
+## 4.5 Paso a paso Backward
+
+Para el método forward el resultado del modelo queda igual que los modelos sugeridos por el método Forward, CP de Mallows y BIC.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+# BACKWARD - Usando el criterio backward:
+# ver resultados en consola
+
+step(completo_1,
+     data = df_2_train,
+     direction = "backward")
+```
+
+```{r}
+modelo = lm(formula = log_Rev_total ~ log_Bal_total + Offer + MORT + AccountAge + 
+    Check + LOAN, data = df_2_train)
+PRESS(modelo) #3775.073
+```
+
+
+## 4.6 Paso a paso Forward y Backward
+
+Para el método forward el resultado del modelo queda igual que los modelos sugeridos por el método Forward, Backward, CP de Mallows y BIC.
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+# STEPWISE - Usando el criterio stepwise:
+# ver resultados en consola
+
+step(nulo_1,
+     scope = list(upper = completo_1),
+     data = df_2_train,
+     direction="both")
+```
+
+# 5. Análisis de calidad predictiva de los modelos
+
+En base al punto anterior se tienen dos modelos y sus respectivos indicador PRESS:
+
+* Modelo de 8 variables (1 criterio lo apoya): 3754
+* Modelo de 6 variables (5 criterios lo apoyan): 3753
+
+De acuerdo al valor PRESS es el menor, se sugiere seleccionar el modelo de 6 variables (Offer, LOAN, MORT, Check, AccountAge, log_Bal_total) en lugar del modelo de 8 variables (Offer, AGE, CHQ, LOAN, MORT, Check, AccountAge, log_Bal_total). De todas formas, es necesario evaluar ambos modelos a partir de los estadísticos MAE, MAPE y RMSE, para descartar sobreajuste. Adicionalmente, se chequeará si los residuos presentan homocedasticidad.
+
+## 5.1 Modelo de 8 variables
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# ELEGIR EL MEJOR MODELO
+
+#### MODELO FINAL
+
+modeloFinal1 = lm(log_Rev_total~Offer+AGE+LOAN+MORT+Check+CHQ+AccountAge+log_Bal_total,data=df_2_train)
+
+
+PRESS(modeloFinal1) # 3982.82 #3775.073
+#confint(modeloFinal)
+summary(modeloFinal1)
+
+par(mfrow=c(2,2))
+plot(modeloFinal1)
+```
+
+Se tiene como resumen del modelo lo siguiente: 
+
+```{r, echo=TRUE, eval=TRUE, results="markup", tidy=TRUE}
+
+summary(modeloFinal1)
+
+```
+
+
+Se observa que el estadistico F rechaza la hipótesis nula y que no todas las variables son significativas, no siendo rechazada la hipótesis nula de los beta de AGE y CHQ. Lo anterior sustenta adicionalmente la decisión guiada por el estadístico PRESS de preferir el modelo con menos variables. Si se observan los gráficos de control del modelo, se nota una leve heterocedasticidad, así como algunos puntos que en los extremos de la normal Q-Q no se ajustan a lo esperado.
+
+
+Finalmente para comparar el desempeño del modelo se comparan los estadísticos MAE, MAPE y RMSE en su desempeño en el entrenamiento y en el test obteniéndose valores similares, con lo que se ratifica que el modelo no cuenta con un sobreajuste observado. Dado que el indicador mape se indefine no se considerará dentro de la conclusión anterior. Las razones de esta indefinición están fuera del alcance de este trabajo.  El MAE indica que el valor típico de los residuos es de aproximadamente 0.67 puntos de la variable dependiente que regiere a los ingresos totales. Respecto del RMSE varía también muy poco entre el subset de entrenamiento y de testeo, e indica que la variable dependiente puede tiene una varianza no explicada que fluctúe en 0.85 unidades de ingreso aproximadamente
+
+
+```{r, echo=FALSE, eval=TRUE, results="markup", tidy=TRUE}
+
+# CALIDAD DEL MODELO
+library(Metrics)
+
+# Contrucción de Metricas de desempeño para entrenamiento y test.
+
+########## ENTRENAMIENTO
+
+final.df_train <- subset(df_2_train , select = c(log_Rev_total,Offer,LOAN,MORT,Check,AccountAge,AGE,log_Bal_total,CHQ))
+
+final.df_train$pred.log_Rev_total <- predict(modeloFinal1, dplyr::select(df_2_train,-log_Rev_total))
+#cor(final.df_train$log_Rev_total, final.df_train$pred.log_Rev_total)
+
+
+mae_train = mae(final.df_train$log_Rev_total,final.df_train$pred.log_Rev_total)
+mape_train = mape(final.df_train$log_Rev_total,final.df_train$pred.log_Rev_total)
+rmse_train = rmse(final.df_train$log_Rev_total,final.df_train$pred.log_Rev_total)
+rse_train = rse(final.df_train$log_Rev_total,final.df_train$pred.log_Rev_total)
+
+df_test=df_2_test
+
+########## Validacion 
+final.df_test <- subset(df_test , select = c(log_Rev_total,Offer,LOAN,MORT,Check,AccountAge,AGE,log_Bal_total,CHQ))
+final.df_test$pred.log_Rev_total <- predict(modeloFinal1, dplyr::select(df_test,-log_Rev_total))
+#cor(final.df_test$log_Rev_total, final.df_test$pred.log_Rev_total)
+
+
+mae_test = mae(final.df_test$log_Rev_total,final.df_test$pred.log_Rev_total)
+mape_test = mape(final.df_test$log_Rev_total,final.df_test$pred.log_Rev_total)
+rmse_test = rmse(final.df_test$log_Rev_total,final.df_test$pred.log_Rev_total)
+#rse_test = rse(final.df_test$log_Rev_total,final.df_test$pred.log_Rev_total)
+
+resultados = data.frame(indicador = c('MAE','MAPE','RMSE'),
+                train = c(mae_train,mape_train,rmse_train),
+                test = c(mae_test,mape_test,rmse_test))
+
+resultados %>% pander()
+
+```
+
+Ahora observaremos la relación entre los datos modelados y los predichos tanto en el data set de entrenamiento como en el de testeo. En ambos casos se observa una relación lineal.
+
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+#plot(final.df_train$log_Rev_total, final.df_train$pred.log_Rev_total)
+#plot(final.df_test$log_Rev_total, final.df_test$pred.log_Rev_total)
+
+
+plot_train=ggplot(final.df_train, aes(x = final.df_train$log_Rev_total, y = final.df_train$pred.log_Rev_total)) + 
+  geom_point() +
+  xlab("Valor Estimado") +
+  ylab("Valor Predicho") +
+  theme_bw() +
+  stat_smooth(method = "lm", col = "red")+
+  ggtitle("Predicho vs Observado")+
+  labs(subtitle = 'Datos Entrenamiento') +
+  xlim(-5,5) +
+  ylim(-4,3)
+
+plot_test=ggplot(final.df_test, aes(x = final.df_test$log_Rev_total, y = final.df_test$pred.log_Rev_total)) + 
+  geom_point() +
+  xlab("Valor Estimado") +
+  ylab("Valor Predicho") +
+  theme_bw() +
+  stat_smooth(method = "lm", col = "red")+
+  ggtitle("Predicho vs Observado")+
+  labs(subtitle = 'Datos Validación')+
+  xlim(-5,5)+
+  ylim(-4,3)
+
+grid.arrange(plot_train, plot_test, ncol=2)
+  
+  
+```
+
+
+
+## 5.2 Modelo de 6 variables
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+# ELEGIR EL MEJOR MODELO
+
+#### MODELO FINAL
+
+modeloFinal2 = lm(formula = log_Rev_total ~ log_Bal_total + Offer + MORT + AccountAge + 
+    Check + LOAN, data = df_2_train)
+
+par(mfrow=c(2,2))
+
+
+
+PRESS(modeloFinal2) # 3982.82
+#confint(modeloFinal)
+
+
+plot(modeloFinal2)
+```
+
+Se tiene como resumen del modelo lo siguiente: 
+
+```{r, echo=TRUE, eval=TRUE, results="markup", tidy=TRUE}
+
+summary(modeloFinal2)
+
+```
+
+
+
+Se observa que el estadistico F rechaza la hipótesis nula y que todos las variables son significativas, a diferencia del modelo anterior.
+
+Si se observan los gráficos de control del modelo, se nota una leve heterocedasticidad, así como algunos puntos que en los extremos de la normal Q-Q no se ajustan a lo esperado, al igual que para el modelo de 8 variables.
+
+Finalmente para comparar el desempeño del modelo se comparan los estadísticos mae, mape y rmse en su desempeño en el entrenamiento y en el test obteniéndose valores similares, con lo que se ratifica que el modelo no cuenta con un sobreajuste observado. Se observa el mismo fenómeno asociado a la indefinición del mape.  El MAE indica que el valor típico de los residuos es de aproximadamente 0.67 puntos de la variable dependiente que regiere a los ingresos totales. Respecto del RMSE varía también muy poco entre el subset de entrenamiento y de testeo, e indica que la variable dependiente predicha puede tener una varianza no explicada que fluctúa en 0.85 unidades aproximadamente.
+
+
+
+```{r, echo=FALSE, eval=TRUE, results="markup", tidy=TRUE}
+
+# CALIDAD DEL MODELO
+library(Metrics)
+
+# Contrucción de Metricas de desempeño para entrenamiento y test.
+
+########## ENTRENAMIENTO
+final.df_train <- subset(df_2_train , select = c(log_Rev_total,Offer,LOAN,MORT,Check,AccountAge,log_Bal_total))
+
+final.df_train$pred.log_Rev_total <- predict(modeloFinal2, dplyr::select(df_2_train,-log_Rev_total))
+#cor(final.df_train$log_Rev_total, final.df_train$pred.log_Rev_total)
+
+
+mae_train=mae(final.df_train$log_Rev_total,final.df_train$pred.log_Rev_total)
+mape_train=mape(final.df_train$log_Rev_total,final.df_train$pred.log_Rev_total)
+rmse_train=rmse(final.df_train$log_Rev_total,final.df_train$pred.log_Rev_total)
+#rse_train=rse(final.df_train$log_Rev_total,final.df_train$pred.log_Rev_total)
+
+df_test=df_2_test
+
+########## Validacion 
+final.df_test <- subset(df_test , select = c(log_Rev_total,Offer,LOAN,MORT,Check,AccountAge,log_Bal_total))
+final.df_test$pred.log_Rev_total <- predict(modeloFinal2, dplyr::select(df_test,-log_Rev_total))
+#cor(final.df_test$log_Rev_total, final.df_test$pred.log_Rev_total)
+
+
+mae_test=mae(final.df_test$log_Rev_total,final.df_test$pred.log_Rev_total)
+mape_test=mape(final.df_test$log_Rev_total,final.df_test$pred.log_Rev_total)
+rmse_test=rmse(final.df_test$log_Rev_total,final.df_test$pred.log_Rev_total)
+rse_test=rse(final.df_test$log_Rev_total,final.df_test$pred.log_Rev_total)
+
+resultados = data.frame(indicador = c('MAE','MAPE','RMSE'),
+                train = c(mae_train,mape_train,rmse_train),
+                test = c(mae_test,mape_test,rmse_test)
+                )
+resultados %>% pander()
+
+```
+
+Ahora observaremos la relación entre los datos modelados y los predichos tanto en el data set de entrenamiento como en el de testeo. En ambos casos se observa una relación lineal.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+
+plot_train=ggplot(final.df_train, aes(x = final.df_train$log_Rev_total, y = final.df_train$pred.log_Rev_total)) + 
+  geom_point() +
+  xlab("Valor Estimado") +
+  ylab("Valor Predicho") +
+  theme_bw() +
+  stat_smooth(method = "lm", col = "red")+
+  ggtitle("Predicho vs Observado")+
+  labs(subtitle = 'Datos Entrenamiento') +
+  xlim(-5,5) +
+  ylim(-4,3)
+
+plot_test=ggplot(final.df_test, aes(x = final.df_test$log_Rev_total, y = final.df_test$pred.log_Rev_total)) + 
+  geom_point() +
+  xlab("Valor Estimado") +
+  ylab("Valor Predicho") +
+  theme_bw() +
+  stat_smooth(method = "lm", col = "red")+
+  ggtitle("Predicho vs Observado")+
+  labs(subtitle = 'Datos Validación')+
+  xlim(-5,5)+
+  ylim(-4,3)
+
+grid.arrange(plot_train, plot_test, ncol=2)
+
+```
+
+# 6. Interpretación de coeficientes y conclusiones
+
+  Dado que en ambos modelos evaluados hay muy poca variación en sus diferentes coeficientes de evaluación, y dado que ambos cumplen con los supuestos requeridos, se opta por elegir el modelo que tiene la menor cantidad de variables, ya que implica un costo de mantención de medición menor. Las variables elegidas (Offer, LOAN, MORT, Check, AccountAge, log_Bal_total) son consistentes con los valores anticipados en el punto 1.7, siendo solo las excepciones Offer y Age, que individualmente presentaron muy bajos valores de ajuste.
+  
+  En resumen, el modelo elegido cuenta con un buen ajuste de acuerdo a cuatro coeficientes de selección de variables. De acuerdo al CP de Mallows, la cantidad de variables sugeridas en el modelo es similar al número de variables ingresadas más la constante, lo cual indica que no se encuentra sesgado en la estimación de los verdaderos coeficientes de regresión y la inclusión de respuestas futuras. Por su parte el BIC también sugirió este modelo. El BIC agrega un componente de penalización a su fórmula de cálculo para lograr un balance entre un modelo que obtiene buen ajuste y el número de parámetros. El modelo en cuestión también fue sugeridos por el Coeficiente de Determinación de ajuste, el cual entrega el modelo que presenta un mayor ajuste a los datos, observado en un mayor valor de $R^{2}$ ajustado. Sin embargo, el valor alcanzado fue de tan solo 0.56, indicando que solo un 56% de la varianza de los ingresos totales se explican por las variables incluidas en el modelo. Finalmente el valor PRESS, que corresponde a la suma cuadrada de los residuos del modelo, indicó que ambos modelos evaluados en la etapa final del proyecto presentaban una calidad predictiva similar.
+  
+  Para eliminar la existencia de sobreajuste, se usaron los estadísticos MAE y RSE, los cuales confirmaron la similitud entre ambos modelos finales, ya que ninguno presentó desviaciones importantes entre la muestra de entrenamiento y validación. Adicionalmente ambos cumplían los supuestos de homocedasticidad y normalidad de residuos. En el caso del modelo elegido finalmente, este obtuvo un Error Absoluto Medio (MAE) aproximado de 0.67 tanto al ser evaluado en la fase de entrenamiento como en la fase de testeo, lo cual significa que típicamente el valor predicho de los ingresos totales podría errar en 0.67 unidades. Por su parte, el RMSE indica que la varianza de los ingresos predicha por el modelo tiene una desviación estándar de aproximadamente 0.85 unidades, de nuevo valor que casi no varía entre la fase de entrenamiento y la de testeo. 
+  
+  A modo de conclusión, los dos modelos evaluados son muy similares en cuanto a su calidad predictiva, evaluados por el estadístico PRESS, y al cumplimiento de supuestos. Sin embargo, la mayoría de los coeficientes de bondad de ajuste sugieren el modelo de 6 variables, y además por el hecho de contener un menor número de variables independientes tendría un menor costo de implementación. Por estas razones se elige este último modelo. Es importante recalcar que si bien el modelo cumple con los supuestos y no se encuentra sobreajustado, no presenta un alto nivel de ajuste, tal como señala el indicador de $R^{2}$ ajustado, y presenta alta variabilidad según indican los estadísticos MAE y RMSE, por lo tanto se sugiere a los stakeholders evaluar si el porcentaje de varianza explicado del modelo elegido cumple con las expectativas y requerimientos del negocio.
+
+Visto entonces el resultado del mejor modelo predictivo según el trabajo realizado, algunas interpretaciones prácticas de estos valores recordando que la variable objetivo corresponde al logaritmo de la rentabilidad (por lo tanto los coeficientes se deben multiplicar por 100) serian:
+
+log_Bal_total 0.386571 * 100 -> 39%
+
+Por cada peso adicional que tiene el cliente en su saldo total, la rentabilidad aumenta en un 39%. Se observa que el valor de beta obtenido de la regresión múltiple (0.39) mantiene el mismo signo y magnitud similar al de la regresión simple (0.28), debido a que esta variable es la que mayor correlación lineal tiene con la variable a explicar.
+
+Offer1 0.708385 -> 0.708385 * 100 -> 71%
+
+Los clientes que han recibido una oferta promocional especial el mes anterior, aumentan su rentabilidad en aproximadamente un 71%, comparados con aquellos clientes que no han recibido oferta promocional. Se observa que el valor de beta obtenido de la regresión múltiple (0.71) mantiene el mismo signo, pero una magnitud muy superior al de la regresión simple (0.04). Lo anterior se debe, probablemente, a que ésta relación se potencia con la presencia las otras variables.
+
+MORT1 -0.519821 -> -0.519821 * 100 -> -52%
+
+Las cuentas de Hipotecarias con una gran importancia para el banco, disminuyen en aproximadamente un 52% la rentabilidad del cliente, comparada con aquellas cuentas Hipotecarias de baja importancia para el banco. Se observa que el valor de beta obtenido de la regresión múltiple (-0.52) tiene un cambio de signo bajo una magnitud superior al de la regresión simple (0.48). Es muy relevante este cambio, pues las conclusiones entre ambos acercamientos difieren enormemente.
+
+AccountAge 0.021016 -> 0.021016 * 100 -> 2.1%
+
+Por cada año de antigüedad de un cliente la rentabilidad aumenta en un 2.1%. Se observa que el valor de beta obtenido de la regresión múltiple (0.02) tiene un cambio de signo bajo una magnitud superior al de la regresión simple (-0.01), pero con un valor bajo respecto a las otras variables seleccionadas, siendo consistente con el valor de ajuste individual.
+
+Check1 -0.303698 -> -0.303698 * 100 -> -30%
+
+Si el cliente tiene una alta actividad en la cuenta corriente, su rentabilidad disminuye en un 30%, comparada con aquellas cuentas corrientes con una baja actividad. Se observa que el valor de beta obtenido de la regresión múltiple (-0.30) cambia el signo y la magnitud superior al de la regresión simple (0.63), bajo un fuerte efecto confundente.
+
+LOAN1 0.165382 -> 0.165382*100 -> 17%
+
+Si el cliente tiene una alta actividad en la cuenta de préstamo personal, su rentabilidad aumenta en un 17%, comparada con aquellas cuentas de préstamo personal con una baja actividad. Se observa que el valor de beta obtenido de la regresión múltiple (0.17) mantiene el mismo signo y considerablemente menor que para la regresión lineal simple (1.026). Era esperable que esta variable no cambiase de signo debido a la relación con la variable a explicar mostrada en el análisis exploratorio.
+
+De manera general la interpretación nos dice que la posibilidad de enviar una oferta a los clientes, su mayor antigüedad como cliente del banco, una alto endeudamiento en la cuenta de préstamo personal y un alto nivel de dinero en la cuenta total; contribuyen a un aumento en la rentabilidad del cliente. De la misma forma, un alto nivel de deuda en las cuentas hipotecarias y una alto nivel de actividad en la cuenta corriente contribuyen a una disminución de la misma rentabilidad.  Además, que el efecto confundente provocó cambios de signos y magnitud, siendo la variable menos afectada (log_Bal_total) la que presentó la mayor correlación lineal con la variable objetivo, como era esperable.
+
+
+```{r, dpi=300,fig.width = 8, fig.asp = .62}
+describe(df_2_test$log_Rev_total, fast = TRUE)
+describe(df_2$log_Rev_total, fast = TRUE)
+```
+
+
+# 7. Conclusiones personales del equipo
+
+El presente trabajo nos permitió explorar una metodología completa, explicada en la introducción, para la aplicación de regresión lineal múltiple a un set de datos. Dentro de cada paso fuimos capaces de ir realizando preselecciones y transformaciones de variables para obtener el mejor modelo posible, el cual deberá ser evaluado dentro del contexto y expectativas del negocio de la banca, si cumple o no con los objetivos planteados. 
+
+Si bien el informe es secuencial, la realidad del trabajo fue completamente distinta. Dado que esta disciplina tiene una parte de arte, fue necesario realizar más de una vez el camino completo, buscando mejoras al modelo planteado. Sin duda, que deben existir mejores modelos que el planteado al final de este informe, pues las opciones de transformación y construcción son infinitas. Sin embargo, estamos satisfechos con contar con un modelo con 6 variables que fuimos capaces de interpretar a cabalidad.
+
+Otro aspecto relevante es entender, que dado el tamaño de la base de datos y la cantidad de variables, pudimos realizar múltiples iteraciones desde inicio a fin, sin tener que esperar más allá de minutos. Frente a una situación real, con una base de datos de millones de registros y una cantidad de variables que superan las 1000, es necesario que los primeros procesos de selección, sobre todo en la construcción de modelos de regresión lineal simple, cobren más protagonismo, para ir acotando la cantidad de variables a revisar en las etapas de análisis de correlación y selección de variables.
+
+Finalmente, la interpretación de variables nos ayudó a acercarnos a bajar desde la modelación al negocio, que cobra mucha relevancia en términos que será lo que finalmente experimente el usuario final. Quisiéramos cerrar estas conclusiones indicando el valor pedagógico del trabajo, por sobre otras instancias, ya que permitió a este grupo profundizar en los conocimientos de los conceptos y técnicas de modelamiento.
